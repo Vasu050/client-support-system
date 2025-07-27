@@ -3,6 +3,9 @@ from .models import Complaints,User
 from django.contrib import messages
 from django.db.models import Count
 from django.db import connection
+
+#from mcp_server import get_user_info
+
 # Create your views here.
 def home(request):
     if not request.user.is_authenticated and request.user.role!='client':
@@ -24,6 +27,7 @@ def home(request):
         complaint.save()
         return redirect('/complaints/')
     else:
+        #get_user_info(user_id=request.user.id)
         return render(request,'client_dashboard.html')
 
 def tickets(request):
@@ -69,5 +73,3 @@ def assign_complaints():
         worker_id=row[0]
         worker=User.objects.get(id=worker_id)
     return worker
-
-

@@ -4,7 +4,14 @@ from django.contrib.auth.models import auth
 from django.contrib import messages
 from django.contrib.auth import authenticate,login,get_user_model
 from django.utils import timezone
-# Create your views here.
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import json
+import re
+from google import genai
+import google.generativeai as genai
+from django.db import connection
+# Create your views here.uu
 
 User=get_user_model()
 
@@ -120,7 +127,7 @@ def manager(request):
         workers = User.objects.filter(role='worker', manager=request.user)
         return render(request,'manager_dashboard.html',{'workers':workers})
     else:
-        messages.info("you are not authorised to access this")
+        messages.info(request,"you are not authorised to access this")
         return redirect('/login')
 
 
@@ -185,13 +192,126 @@ def logout(request):
     return redirect('/')
 
 
-    
+# ✅ Gemini config (replace with environment variable in production)
+genai.configure(api_key="AIzaSyBLTZXr4KG6cbk9ajzdaE9Mp__IssyUyGo")
 
+# ✅ Use supported free-tier model
+model = genai.GenerativeModel("models/gemini-1.5-flash")  # You can also test "models/gemini-1.0"
 
+# ✅ Helper: Call Gemini and return cleaned result
+def gemini_generate(prompt: str) -> str:
+    try:
+        content = model.generate_content(prompt)
+        print("response",content)
+        return content.text.strip()
+    except Exception as e:
+        return f"ERROR: {str(e)}"
 
+# ✅ Helper: Convert user message into SQL
+def generate_sql_from_message(user_message: str, schema_hint: str = "") -> str:
+    prompt = f"""
+You are a SQL expert. Based on the following database schema and user message, write a SELECT SQL query.
+Schema:
+{schema_hint}
 
+User Message:
+"{user_message}"
 
+Only return the SQL query. No explanation.
+"""
+    raw_sql = gemini_generate(prompt)
+    print("raw",raw_sql)
+    # Clean markdown formatting like ```sql ... ```
+    cleaned_sql = re.sub(r"^```sql|```$", "", raw_sql.strip(), flags=re.IGNORECASE).strip()
 
+    return cleaned_sql
 
+# ✅ Helper: Convert query result into natural language
+def generate_natural_response(user_message: str, query_result: list[dict]) -> str:
+    prompt = f"""
+User asked: "{user_message}"
 
+The SQL result is:
+{query_result}
 
+Generate a human-readable response summarizing the result.
+"""
+    return gemini_generate(prompt)
+
+# ✅ Execute safe SELECT query
+def execute_select_query(sql_query: str) -> list[dict]:
+    cleaned_sql = sql_query.strip().lower()
+    if not cleaned_sql.startswith("select"):
+        raise ValueError("Only SELECT queries are allowed.")
+
+    with connection.cursor() as cursor:
+        cursor.execute(sql_query)
+        columns = [col[0] for col in cursor.description]
+        rows = cursor.fetchall()
+
+    return [dict(zip(columns, row)) for row in rows]
+
+# ✅ Main Django view
+@csrf_exempt
+def chat_to_sql_view(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST allowed"}, status=405)
+
+    try:
+        body = json.loads(request.body)
+        user_message = body.get("message", "").strip()
+
+        if not user_message:
+            return JsonResponse({"error": "Message is required"}, status=400)
+
+        # : Replace with actual logged-in user
+        user_id = request.user.id  # temp value for demo/testing
+        print(user_id)
+        # Provide schema and instructions to Gemini
+        schema_hint = f"""
+Table: client_customuser
+- id INT
+- username VARCHAR
+- email VARCHAR
+- role VARCHAR
+- manager_id INT
+
+Instructions:
+dont query on username condition rather query on id condition for example SELECT * FROM client_customuser WHERE id = [user_id]
+and take value of user_id variable not string.
+Table: complaint_complaints
+- id INT
+- product VARCHAR
+- status VARCHAR
+- client_id INT
+- assigned_worker_id INT
+
+Instructions:
+Use client_id = {user_id} or assigned_worker_id = {user_id} when needed.
+Only SELECT queries.
+
+"""
+
+        print("🟢 Received message:", user_message)
+
+        sql_query = generate_sql_from_message(user_message, schema_hint)
+        print("🧠 Generated SQL:", sql_query)
+
+        if "ERROR" in sql_query:
+            return JsonResponse({"error": sql_query}, status=500)
+
+        query_result = execute_select_query(sql_query)
+        print("📦 Query result:", query_result)
+
+        natural_response = generate_natural_response(user_message, query_result)
+        print("💬 Natural language response:", natural_response)
+
+        return JsonResponse({
+            "response": natural_response,
+            "sql_query": sql_query,
+            "query_result": query_result
+        })
+
+    except Exception as e:
+        print("❌ Chatbot error:", str(e))
+        return JsonResponse({"error": "Internal server error", "details": str(e)}, status=500)

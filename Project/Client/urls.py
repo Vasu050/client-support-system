@@ -10,5 +10,6 @@ urlpatterns=[
     path('manager/add/',views.add_worker,name='add_worker'),
     path('manager/delete/<int:id>', views.delete_worker, name='delete_worker'),
     path('delete',views.delete,name="delete"),
-    path('logout',views.logout,name="logout")
+    path('logout',views.logout,name="logout"),
+    path('chatbot/',views.chat_to_sql_view, name='chatbot')
 ]

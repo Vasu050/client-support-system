@@ -9,7 +9,7 @@ class CustomUser(AbstractUser):
         ('admin', 'Admin'),
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='client')
-
+    
     manager = models.ForeignKey(
         'self',
         null=True,

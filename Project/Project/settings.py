@@ -25,7 +25,8 @@ SECRET_KEY = "django-insecure-bxddpaxla8*79y80+f12&_&+lg%6hf+n%*m+1v_g!1d1t=ktc#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+    
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -126,3 +127,21 @@ STATICFILES_DIRS=[
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://c5f8928102ea.ngrok-free.app',
+]
+
+SESSION_COOKIE_AGE = 1800  # seconds (30 minutes)
+
+# Optional: Expire session when browser closes
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://your-ngrok-subdomain.ngrok.io",
+]
+
+
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
